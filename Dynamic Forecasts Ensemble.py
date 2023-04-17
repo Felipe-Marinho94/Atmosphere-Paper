@@ -111,7 +111,7 @@ param_grid_RF = {
 gs_RF = GridSearchCV(RandomForestRegressor(random_state=42), param_grid_RF, scoring=scoring_regressor,
                      cv = 5, refit = 'NRMSE', return_train_score = True)
 
-X, y = pd.concat([X_train, X_test], axis=0).reset_index(drop=True), pd.concat([y_train, y_test], axis=0).reset_index(drop=True)
+#X, y = pd.concat([X_train, X_test], axis=0).reset_index(drop=True), pd.concat([y_train, y_test], axis=0).reset_index(drop=True)
 gs_RF.fit(X_train, y_train)
 results_RF = gs_RF.cv_results_
 
@@ -390,18 +390,18 @@ for k in models:
 
 
 #Reshape das previsões para o treino e teste
-test_forecasts['KNN'] = np.squeeze(test_forecasts['KNN'])
-test_forecasts['LASSO'] = np.squeeze(test_forecasts['LASSO'])
-test_forecasts['RF'] = np.squeeze(test_forecasts['RF'])
-test_forecasts['Ridge'] = np.squeeze(test_forecasts['Ridge'])
-test_forecasts['EN'] = np.squeeze(test_forecasts['EN'])
-print(test_forecasts['KNN'].ndim)
+#test_forecasts['KNN'] = np.squeeze(test_forecasts['KNN'])
+#test_forecasts['LASSO'] = np.squeeze(test_forecasts['LASSO'])
+#test_forecasts['RF'] = np.squeeze(test_forecasts['RF'])
+#test_forecasts['Ridge'] = np.squeeze(test_forecasts['Ridge'])
+#test_forecasts['EN'] = np.squeeze(test_forecasts['EN'])
+#print(test_forecasts['KNN'].ndim)
 
-train_forecasts['KNN'] = np.squeeze(train_forecasts['KNN'])
-train_forecasts['LASSO'] = np.squeeze(train_forecasts['LASSO'])
-train_forecasts['RF'] = np.squeeze(train_forecasts['RF'])
-train_forecasts['Ridge'] = np.squeeze(train_forecasts['Ridge'])
-train_forecasts['EN'] = np.squeeze(train_forecasts['EN'])
+#train_forecasts['KNN'] = np.squeeze(train_forecasts['KNN'])
+#train_forecasts['LASSO'] = np.squeeze(train_forecasts['LASSO'])
+#train_forecasts['RF'] = np.squeeze(train_forecasts['RF'])
+#train_forecasts['Ridge'] = np.squeeze(train_forecasts['Ridge'])
+#train_forecasts['EN'] = np.squeeze(train_forecasts['EN'])
 
 # previsões como pandas dataframe
 ts_forecasts_df = pd.DataFrame(test_forecasts)
