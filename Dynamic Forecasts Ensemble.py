@@ -1,5 +1,5 @@
 #Ensemble de previsões para o conjunto
-#Folsom da Califórnia
+#de Petrolina-PE
 #Autor:Felipe Pinto Marinho
 #Data:16/02/2023
 
@@ -89,8 +89,8 @@ train_idx, test_idx = train_test_split(Dados.index, test_size=0.3, shuffle=False
 
 
 #Para o conjunto de dados de velocidade do vento
-X_train, y_train = train.drop(columns=['ws_50_10']), train[train.columns[18]]
-X_test, y_test = test.drop(columns=['ws_50_10']), test[test.columns[18]]
+X_train, y_train = train.drop(columns=['ws_50_10']), train[train.columns[6]]
+X_test, y_test = test.drop(columns=['ws_50_10']), test[test.columns[6]]
 
 # Pevisão sobre o ktDNI
 X_train, y_train = train.drop(columns=['DNI_10', 'ktDNI_10', 'I_cls_10']), train[train.columns[6]]
@@ -237,8 +237,8 @@ plt.show()
 ###########################################################################
 #SVR
 #Grid para SVR
-param_grid_SVR = {'C': [0.1, 1, 10],#, #100, #1000],
-    'epsilon': [1, 0.1], #0.01, #0.001, #0.0001],
+param_grid_SVR = {'C': [0.1, 1, 10, 100, 1000],
+    'epsilon': [1, 0.1, 0.01, 0.001, 0.0001],
     'kernel': ['rbf']}
 
 gs_SVR = GridSearchCV(SVR(), param_grid_SVR, scoring=scoring_regressor,
@@ -318,8 +318,6 @@ plt.ylabel("Score")
 ax = plt.gca()
 ax.set_xlim(0, 1)
 ax.set_ylim(0, -500)
-
-X_axis = np.array(results_Elastic["param_l1_ratio"].data, dtype=float)
 
 for scorer, color in zip(sorted(scoring_regressor), ["g", "k"]):
     for sample, style in (("train", "--"), ("test", "-")):
