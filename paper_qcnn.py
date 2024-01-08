@@ -35,11 +35,31 @@ from gmdh import Combi, split_data
 from scipy.io import loadmat
 
 #Carregando o dataset para análise
-features_irradiance = pd.read_csv("Folsom_irradiance.csv", sep = ",")
-features_sky_images = pd.read_csv("Folsom_sky_image_features.csv", sep = ",")
+features_irradiance = pd.read_csv("Irradiance_features_intra-hour.csv", sep = ",")
+features_sky_images = pd.read_csv("Sky_image_features_intra-hour.csv", sep = ",")
 target_intra_hour =  pd.read_csv("Target_intra-hour.csv", sep = ",")
 
 #Pré-visualização dos dataframes
 features_irradiance.head()
+features_irradiance.tail()
+
 features_sky_images.head()
+features_sky_images.tail()
+
 target_intra_hour.head()
+target_intra_hour.tail()
+
+#Avaliando o que cada coluna representa
+list(features_irradiance.columns.values)
+list(features_sky_images.columns.values)
+list(target_intra_hour.columns.values)
+
+#Gerando os datasets para cada horizonte de previsão
+#GHI
+#Para 5 min a posteriori
+features_irradiance_5_min = features_irradiance.columns('B(ghi_kt|5min)', 'V(ghi_kt|5min)', 'L(ghi_kt|5min)')
+features_sky_images = features_sky_images.drop(features_sky_images.columns)
+features_5_min = pd.concat([features_irradiance_5_min, features_sky_images], axis = 1) #features irradiance + features sky images
+
+list(features.columns.values)
+features = features.drop(columns=("ghi, dni, dhi", "AVG(NRB)", "STD(NRB)", "ENT(NRB)"))
