@@ -57,9 +57,8 @@ list(target_intra_hour.columns.values)
 #Gerando os datasets para cada horizonte de previsão
 #GHI
 #Para 5 min a posteriori
-features_irradiance_5_min = features_irradiance.columns('B(ghi_kt|5min)', 'V(ghi_kt|5min)', 'L(ghi_kt|5min)')
-features_sky_images = features_sky_images.drop(features_sky_images.columns)
+features_irradiance_5_min = features_irradiance[['B(ghi_kt|5min)', 'V(ghi_kt|5min)', 'L(ghi_kt|5min)']]
+features_sky_images = features_sky_images.drop(columns=['AVG(NRB)', 'STD(NRB)', 'ENT(NRB)'])
 features_5_min = pd.concat([features_irradiance_5_min, features_sky_images], axis = 1) #features irradiance + features sky images
 
-list(features.columns.values)
-features = features.drop(columns=("ghi, dni, dhi", "AVG(NRB)", "STD(NRB)", "ENT(NRB)"))
+list(features_5_min.columns.values)
