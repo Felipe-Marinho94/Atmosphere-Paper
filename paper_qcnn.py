@@ -54,11 +54,23 @@ list(features_irradiance.columns.values)
 list(features_sky_images.columns.values)
 list(target_intra_hour.columns.values)
 
-#Gerando os datasets para cada horizonte de previsão
-#GHI
-#Para 5 min a posteriori
+'''
+Gerando os datasets para cada horizonte de previsão
+GHI/Para 5 min a posteriori/Features e Targets
+'''
 features_irradiance_5_min = features_irradiance[['B(ghi_kt|5min)', 'V(ghi_kt|5min)', 'L(ghi_kt|5min)']]
 features_sky_images = features_sky_images.drop(columns=['AVG(NRB)', 'STD(NRB)', 'ENT(NRB)'])
 features_5_min = pd.concat([features_irradiance_5_min, features_sky_images], axis = 1) #features irradiance + features sky images
-
 list(features_5_min.columns.values)
+features_5_min.head()
+features_5_min.tail()
+
+target_5_min = target_intra_hour[['ghi_5min', 'ghi_clear_5min', 'ghi_kt_5min', 'timestamp']]
+list(target_5_min.columns.values)
+target_5_min.head()
+target_5_min.tail()
+
+'''
+Etapa de pré-processamento
+Remoção de NA's, filtros de volumetria e volatilidade
+'''
