@@ -15,34 +15,42 @@ from qiskit.circuit import ParameterVector
 from qiskit.circuit.library import ZFeatureMap
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_algorithms.optimizers import COBYLA, L_BFGS_B
-from qiskit_algorithms.utils import algorithm_globals
-from qiskit_machine_learning.algorithms.classifiers import NeuralNetworkClassifier
+from qiskit_machine_learning.algorithms import QSVR
 from qiskit_machine_learning.neural_networks import EstimatorQNN
 from qiskit_machine_learning.algorithms.regressors import NeuralNetworkRegressor
-from sklearn.model_selection import train_test_split
 import pylatexenc
+import pennylane as qml
+from sklearn.svm import SVR
+from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter
+from qiskit_machine_learning.circuit.library import QNNCircuit
+from qiskit_algorithms.utils import algorithm_globals
 
-#Para o NBEATS
-from neuralforecast import NeuralForecast
-from neuralforecast.models import NBEATS
-from neuralforecast.losses.pytorch import DistributionLoss
+#Para ML
 import optuna
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error, r2_score
+from sklearn.model_selection import train_test_split, RepeatedKFold, cross_val_score
+from sklearn.preprocessing import MaxAbsScaler
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.pipeline import Pipeline
+import sklearn
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import Perceptron
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.model_selection import RepeatedStratifiedKFold
 
 #Para o GMDH
 import pandas as pd
 import seaborn as sns
 from gmdh import Combi, split_data
 
-#Função para avaliação da função custo na etapa de treinamento
-def callback_graph(weights, obj_func_eval):
-    clear_output(wait=True)
-    objective_func_vals.append(obj_func_eval)
-    plt.title("Objective function value against iteration")
-    plt.xlabel("Iteration")
-    plt.ylabel("Objective function value")
-    plt.plot(range(len(objective_func_vals)), objective_func_vals)
-    plt.show()
+#LightGBM
+import lightgbm as lgb
+import optuna as opt
+
 
 #Carregando o dataset para análise
 features_irradiance = pd.read_csv("Irradiance_features_intra-hour.csv", sep = ",")
@@ -94,145 +102,226 @@ Será utilizados os anos de 2013,2014,2015 para treino dos modelos
 2016 será utilizado para teste
 '''
 train = df_sem_Na.loc[df_sem_Na['timestamp'] < '2016-01-01']
-test = df_sem_Na.loc[(df_sem_Na['timestamp'] >= '2016-01-01') & (df_sem_Na['timestamp'] < '2017-12-31')]
+test = df_sem_Na.loc[(df_sem_Na['timestamp'] >= '2016-01-01') & (df_sem_Na['timestamp'] < '2016-12-31')]
 features_train = train.drop(columns = ['ghi_5min','ghi_clear_5min','ghi_kt_5min', 'timestamp'])
 target_train = train[['ghi_5min','ghi_clear_5min','ghi_kt_5min']]
+features_test = test.drop(columns = ['ghi_5min','ghi_clear_5min','ghi_kt_5min', 'timestamp'])
+target_test = test[['ghi_5min','ghi_clear_5min','ghi_kt_5min']]
 
-'''
-CNN quântica para previsão de irradiância solar de curto prazo
-'''
+#------------------------------------------------------------------------------
+#Implementação do modelo de Group Method Data Handling (GMDH)
+#Fundamentado pela documentação do pacote GMDH: https://gmdh.net/index.html
+#------------------------------------------------------------------------------
+model_GMDH = Combi()
+model_GMDH.fit(np.array(features_train), np.array(target_train['ghi_kt_5min']))
+GMDH_hat_5min = model_GMDH.predict(features_test)
 
-algorithm_globals.random_seed = 12345
+#Conversão em inrradiância utilizando a irradiância de céu claro
+GMDH_hat_5min = GMDH_hat_5min * target_test['ghi_clear_5min']
 
-def conv_circuit(params):
-    target = QuantumCircuit(2)
-    target.rz(-np.pi / 2, 1)
-    target.cx(1, 0)
-    target.rz(params[0], 0)
-    target.ry(params[1], 1)
-    target.cx(0, 1)
-    target.ry(params[2], 1)
-    target.cx(1, 0)
-    target.rz(np.pi / 2, 0)
-    return target
+#Avaliação do desempenho: RMSE, MAE, R², MAPE
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], GMDH_hat_5min)))
+print("O valor do RMSE é:", mean_absolute_error(target_test['ghi_5min'], GMDH_hat_5min))
+print("O valor do RMSE é:", r2_score(target_test['ghi_5min'], GMDH_hat_5min))
+print("O valor do RMSE é:", mean_absolute_percentage_error(target_test['ghi_5min'], GMDH_hat_5min))
 
+#------------------------------------------------------------------------------
+#Implementação do modelo Light Gradient Boosting Method (lightGBM)
+#Fundamentado pela documentação do pacote lightGBM: https://lightgbm.readthedocs.io/en/latest/Python-Intro.html
+#------------------------------------------------------------------------------
+#Carregando os dados para o modelo lightGBM
+train_lightgbm = lgb.Dataset(np.array(features_train), np.array(target_train['ghi_kt_5min']))
+test_lightgbm = lgb.Dataset(features_test, target_test['ghi_kt_5min'], reference = train_lightgbm)
 
-# Desenhando o circuito quântico para os dados de entrada
-params = ParameterVector("θ", length=3)
-circuit = conv_circuit(params)
-circuit.draw("mpl")
+#Configuração dos parâmetros
+params = {
+    'task': 'train', 
+    'boosting': 'gbdt',
+    'objective': 'regression',
+    'num_leaves': 10,
+    'learnnig_rage': 0.05,
+    'metric': {'l2','l1'},
+    'verbose': -1
+}
 
-#Função para implementar a camada convolucional quântica
-def conv_layer(num_qubits, param_prefix):
-    qc = QuantumCircuit(num_qubits, name="Convolutional Layer")
-    qubits = list(range(num_qubits))
-    param_index = 0
-    params = ParameterVector(param_prefix, length=num_qubits * 3)
-    for q1, q2 in zip(qubits[0::2], qubits[1::2]):
-        qc = qc.compose(conv_circuit(params[param_index : (param_index + 3)]), [q1, q2])
-        qc.barrier()
-        param_index += 3
-    for q1, q2 in zip(qubits[1::2], qubits[2::2] + [0]):
-        qc = qc.compose(conv_circuit(params[param_index : (param_index + 3)]), [q1, q2])
-        qc.barrier()
-        param_index += 3
+#Ajustando o modelo
+model = lgb.train(params,
+                 train_set = train_lightgbm,
+                 valid_sets = test_lightgbm)
 
-    qc_inst = qc.to_instruction()
+#Previsão
+lightGBM_hat_5min = model.predict(features_test)
 
-    qc = QuantumCircuit(num_qubits)
-    qc.append(qc_inst, qubits)
-    return qc
+#Conversão para irradiância
+lightGBM_hat_5min = lightGBM_hat_5min * target_test['ghi_clear_5min']
 
+#Avaliação do Desempenho
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], lightGBM_hat_5min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'], lightGBM_hat_5min))
+print("O valor do R² é:", r2_score(target_test['ghi_5min'], lightGBM_hat_5min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'], lightGBM_hat_5min)) 
 
-circuit = conv_layer(4, "θ")
+#Importância de Atributos
+lgb.plot_importance(model, height=.5)  
 
-#Desenhando a camada convolucional quântica
-circuit.decompose().draw("mpl")
+#Procedimento de Tunning, para referência: https://forecastegy.com/posts/how-to-use-optuna-to-tune-lightgbm-hyperparameters/
+def objective(trial):
+    params = {
+        "objective": "regression",
+        "metric": "rmse",
+        "n_estimators": 1000,
+        "verbosity": -1,
+        "bagging_freq": 1,
+        "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
+        "num_leaves": trial.suggest_int("num_leaves", 2, 2**10),
+        "subsample": trial.suggest_float("subsample", 0.05, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.05, 1.0),
+        "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, 100),
+    }
+    
+    model = lgb.LGBMRegressor(**params)
+    model.fit(features_train, target_train['ghi_kt_5min'])
+    predictions = model.predict(features_test)
+    rmse = mean_squared_error(target_test['ghi_kt_5min'], predictions, squared=False)
+    return rmse
 
-#Criação da camada de poooling
-def pool_circuit(params):
-    target = QuantumCircuit(2)
-    target.rz(-np.pi / 2, 1)
-    target.cx(1, 0)
-    target.rz(params[0], 0)
-    target.ry(params[1], 1)
-    target.cx(0, 1)
-    target.ry(params[2], 1)
+#Otimização utilizando o pacote Optuna
+study = optuna.create_study(direction='minimize')
+study.optimize(objective, n_trials=30)
 
-    return target
+print('Best hyperparameters:', study.best_params)
+print('Best RMSE:', study.best_value)
+study.best_params
 
+best_params = {
+    'task': 'train', 
+    'boosting': 'gbdt',
+    'objective': 'regression',
+    'num_leaves': 47,
+    'learnnig_rage': 0.005060806061277028,
+    'min_data_in_leaf': 32,
+    'subsample': 0.9028140448557904,
+    'colsample_bytree': 0.9053100883131857,
+    'metric': {'l2','l1'},
+    'verbose': -1
+}
 
-params = ParameterVector("θ", length=3)
-circuit = pool_circuit(params)
-circuit.draw("mpl")
+#Utilizando o LGBM otimizado
+model = lgb.train(best_params,
+                 train_set = train_lightgbm,
+                 valid_sets = test_lightgbm)
 
-def pool_layer(sources, sinks, param_prefix):
-    num_qubits = len(sources) + len(sinks)
-    qc = QuantumCircuit(num_qubits, name="Pooling Layer")
-    param_index = 0
-    params = ParameterVector(param_prefix, length=num_qubits // 2 * 3)
-    for source, sink in zip(sources, sinks):
-        qc = qc.compose(pool_circuit(params[param_index : (param_index + 3)]), [source, sink])
-        qc.barrier()
-        param_index += 3
+#Previsão
+lightGBM_hat_5min = model.predict(features_test)
 
-    qc_inst = qc.to_instruction()
+#Conversão para irradiância
+lightGBM_hat_5min = lightGBM_hat_5min * target_test['ghi_clear_5min']
 
-    qc = QuantumCircuit(num_qubits)
-    qc.append(qc_inst, range(num_qubits))
-    return qc
+#Avaliação do Desempenho
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], lightGBM_hat_5min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'], lightGBM_hat_5min))
+print("O valor do R² é:", r2_score(target_test['ghi_5min'], lightGBM_hat_5min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'], lightGBM_hat_5min))
 
+#------------------------------------------------------------------------------
+#Implementação do modelo Quantum Support Vector Regression (QSVR)
+#Fundamentado pela documentação do pacote QISKIT: 
+#------------------------------------------------------------------------------
+nqubits = 4
+dev = qml.device("lightning.qubit", wires = nqubits)
 
-sources = [0, 1]
-sinks = [2, 3]
-circuit = pool_layer(sources, sinks, "θ")
-circuit.decompose().draw("mpl")
+@qml.qnode(dev)
+def kernel_circ(a, b):
+    qml.AmplitudeEmbedding(
+        a, wires = range(nqubits), pad_with = 0, normalize = True)
+    qml.adjoint(qml.AmplitudeEmbedding(
+        b, wires = range(nqubits), pad_with = 0, normalize = True))
+    return qml.probs(wires=range(nqubits))
 
-#Codificação do dataset em um circuito quântico com 8 qubits utilizando ZFeatureMap
-feature_map = ZFeatureMap(15)
-feature_map.decompose().draw("mpl")
+#Realizando alguns testes
+kernel_circ(np.array(features_train)[0], np.array(features_train)[0])[0]
 
-#Treinando a rede QCNN, utilizando como porta quântica para a medição a porta de Pauli esparsa
-feature_map = ZFeatureMap(15)
+#Utilizando o kernel quântico desenvolvido para um SVC do sklearn
+def qkernel(A, B):
+    return np.array([[kernel_circ(a, b)[0] for b in B] for a in A])
 
-ansatz = QuantumCircuit(15, name="Ansatz")
+np.array(features_train)[0:5000, :]
+np.array(target_train['ghi_kt_5min'])[0:100]
+qsvr = QSVR(kernel = qkernel).fit(np.array(features_train)[0:500, :],
+                                 np.array(target_train['ghi_kt_5min'])[0:500])
 
-#Construção da QCNN
-# Primeira Camada Convolucional
-ansatz.compose(conv_layer(15, "с1"), list(range(15)), inplace=True)
+QSVR_hat_5min = qsvr.predict(np.array(features_test)[0:100, :],)
+QSVR_hat_5min = QSVR_hat_5min * target_test['ghi_clear_5min'][0:100]
 
-# Primeira Camada de Pooling
-ansatz.compose(pool_layer([0, 1, 2, 3, 4, 5, 6, 7], 
-                          [8, 9, 10, 11, 12, 13, 14], "p1"),
-               list(range(15)), inplace=True)
+qsvr = QSVR()
+qsvr.fit(np.array(features_train)[0:100, :],
+        np.array(target_train['ghi_kt_5min'])[0:100])
 
-# Segunda Camada Convolucional
-ansatz.compose(conv_layer(4, "c2"), list(range(11, 15)), inplace=True)
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'][0:100], QSVR_hat_5min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'][0:100], QSVR_hat_5min))
+print("O valor do R² é:", r2_score(target_test['ghi_5min'][0:100], QSVR_hat_5min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'][0:100], QSVR_hat_5min))
 
-# Segunda Camada de Pooling
-ansatz.compose(pool_layer([0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10], "p2"),
-               list(range(4, 15)), inplace=True)
+#------------------------------------------------------------------------------
+#Implementação da seleção de features utilizando Recursive Features Elimination]
+#RFE - source:https://machinelearningmastery.com/rfe-feature-selection-in-python/ 
+#------------------------------------------------------------------------------
+rfe = RFE(estimator=DecisionTreeRegressor(), n_features_to_select=1)
+model = DecisionTreeRegressor()
+pipeline = Pipeline(steps=[('s',rfe),('m',model)])
 
-# Terceira Camada Convolucional
-ansatz.compose(conv_layer(9, "c3"), list(range(6, 15)), inplace=True)
+#Avaliação do modelo
+cv = RepeatedKFold(n_splits=5, n_repeats=1, random_state=1)
+n_scores = cross_val_score(pipeline, features_train, target_train['ghi_kt_5min'],
+                           scoring='neg_mean_absolute_error', cv=cv, n_jobs=-1, error_score='raise')
 
-# Terceira Camada de Pooling
-ansatz.compose(pool_layer([0], [1], "p3"), list(range(6, 8)), inplace=True)
+#Reportando desempenho
+print('MAE: %.3f (%.3f)' % (np.mean(n_scores), np.std(n_scores)))
 
-# Combinando o feature map e ansatz
-circuit = QuantumCircuit(15)
-circuit.compose(feature_map, range(15), inplace=True)
-circuit.compose(ansatz, range(15), inplace=True)
+#Selecionando a features
+rfe.fit(features_train, target_train['ghi_kt_5min'])
 
-# construindo o regressor para a rede
-regression_estimator_qnn = EstimatorQNN(
-    circuit=circuit.decompose(),
-    input_params=feature_map.parameters,
-    weight_params=ansatz.parameters,
-)
+#selecionando as features
+for i in range(features_train.shape[1]):
+ print('Column: %d, Selected %s, Rank: %.3f' % (i, rfe.support_[i], rfe.ranking_[i]))
+ 
+list(features_train.columns)
 
+#------------------------------------------------------------------------------
+#Implementação do Variational Quantum Regressor (VQR)
+#VQR - source:https://qiskit-community.github.io/qiskit-machine-learning/tutorials/02_neural_network_classifier_and_regressor.html 
+#------------------------------------------------------------------------------
+#Construindo um fature map simples
+X_train = np.array(features_train['B(ghi_kt|5min)']).reshape(len(features_train), 1)
+y_train = np.array(target_train['ghi_kt_5min'])
 
-circuit.draw("mpl")
+X_test = np.array(features_test['B(ghi_kt|5min)']).reshape(len(features_test), 1)
+y_test = np.array(target_test['ghi_kt_5min'])
+
+param_x = Parameter("x")
+feature_map = QuantumCircuit(1, name="fm")
+feature_map.ry(param_x, 0)
+
+#Construindo um ansatz simples
+param_y = Parameter("y")
+ansatz = QuantumCircuit(1, name="vf")
+ansatz.ry(param_y, 0)
+
+#Construindo um circuito
+qc = QNNCircuit(feature_map=feature_map, ansatz=ansatz)
+
+#Construindo a QNN
+regression_estimator_qnn = EstimatorQNN(circuit=qc)
+
+objective_func_vals = []
+def callback_graph(weights, obj_func_eval):
+    clear_output(wait=True)
+    objective_func_vals.append(obj_func_eval)
+    plt.title("Objective function value against iteration")
+    plt.xlabel("Iteration")
+    plt.ylabel("Objective function value")
+    plt.plot(range(len(objective_func_vals)), objective_func_vals)
+    plt.show()
 
 regressor = NeuralNetworkRegressor(
     neural_network=regression_estimator_qnn,
@@ -241,9 +330,17 @@ regressor = NeuralNetworkRegressor(
     callback=callback_graph,
 )
 
-#Treinamento da rede
-x = np.asarray(features_train)
-y = np.asarray(target_train[['ghi_kt_5min']])
-objective_func_vals = []
 plt.rcParams["figure.figsize"] = (12, 6)
-regressor.fit(x, y)
+
+X_train[:100].shape
+np.array(y_train[:100])
+
+regressor.fit(X_train[:1000], y_train[:1000])
+VQR_hat_5min = regressor.predict(X_test[:1000])
+VQR_hat_5min = np.squeeze(VQR_hat_5min)
+
+VQR_hat_5min = VQR_hat_5min * target_test['ghi_clear_5min'][0:1000]
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'][0:1000], VQR_hat_5min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'][0:1000], VQR_hat_5min))
+print("O valor do R² é:", r2_score(target_test['ghi_5min'][0:1000], VQR_hat_5min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'][0:1000], VQR_hat_5min))
