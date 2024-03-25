@@ -51,6 +51,9 @@ from gmdh import Combi, split_data
 import lightgbm as lgb
 import optuna as opt
 
+#XGBoost
+from xgboost import XGBRegressor
+from xgboost import plot_importance
 
 #Carregando o dataset para análise
 features_irradiance = pd.read_csv("Irradiance_features_intra-hour.csv", sep = ",")
@@ -130,7 +133,9 @@ print("O valor do RMSE é:", mean_absolute_percentage_error(target_test['ghi_5mi
 #Fundamentado pela documentação do pacote lightGBM: https://lightgbm.readthedocs.io/en/latest/Python-Intro.html
 #------------------------------------------------------------------------------
 #Carregando os dados para o modelo lightGBM
-train_lightgbm = lgb.Dataset(np.array(features_train), np.array(target_train['ghi_kt_5min']))
+
+
+train_lightgbm = lgb.Dataset(features_train, target_train['ghi_kt_5min'])
 test_lightgbm = lgb.Dataset(features_test, target_test['ghi_kt_5min'], reference = train_lightgbm)
 
 #Configuração dos parâmetros
@@ -139,7 +144,7 @@ params = {
     'boosting': 'gbdt',
     'objective': 'regression',
     'num_leaves': 10,
-    'learnnig_rage': 0.05,
+    'learning_rate': 0.05,
     'metric': {'l2','l1'},
     'verbose': -1
 }
@@ -162,7 +167,8 @@ print("O valor do R² é:", r2_score(target_test['ghi_5min'], lightGBM_hat_5min)
 print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'], lightGBM_hat_5min)) 
 
 #Importância de Atributos
-lgb.plot_importance(model, height=.5)  
+lgb.plot_importance(model, figsize=(7,6), title="LightGBM Feature Importance")
+plt.show()  
 
 #Procedimento de Tunning, para referência: https://forecastegy.com/posts/how-to-use-optuna-to-tune-lightgbm-hyperparameters/
 def objective(trial):
@@ -191,23 +197,9 @@ study.optimize(objective, n_trials=30)
 
 print('Best hyperparameters:', study.best_params)
 print('Best RMSE:', study.best_value)
-study.best_params
-
-best_params = {
-    'task': 'train', 
-    'boosting': 'gbdt',
-    'objective': 'regression',
-    'num_leaves': 47,
-    'learnnig_rage': 0.005060806061277028,
-    'min_data_in_leaf': 32,
-    'subsample': 0.9028140448557904,
-    'colsample_bytree': 0.9053100883131857,
-    'metric': {'l2','l1'},
-    'verbose': -1
-}
 
 #Utilizando o LGBM otimizado
-model = lgb.train(best_params,
+model = lgb.train(study.best_params,
                  train_set = train_lightgbm,
                  valid_sets = test_lightgbm)
 
@@ -227,7 +219,7 @@ print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5mi
 #Implementação do modelo Quantum Support Vector Regression (QSVR)
 #Fundamentado pela documentação do pacote QISKIT: 
 #------------------------------------------------------------------------------
-nqubits = 4
+nqubits = 1
 dev = qml.device("lightning.qubit", wires = nqubits)
 
 @qml.qnode(dev)
@@ -344,3 +336,70 @@ print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'][
 print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'][0:1000], VQR_hat_5min))
 print("O valor do R² é:", r2_score(target_test['ghi_5min'][0:1000], VQR_hat_5min))
 print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'][0:1000], VQR_hat_5min))
+
+#------------------------------------------------------------------------------
+#Implementação do modelo XGBoost
+#source:
+#------------------------------------------------------------------------------
+#Incializando o modelo
+XGBoost = XGBRegressor()
+
+#Definindo o método de avaliação do modelo
+cv = RepeatedKFold(n_splits=5, n_repeats=1, random_state=1)
+
+scores = cross_val_score(XGBoost, features_train, target_train['ghi_kt_5min'],
+                         scoring='neg_mean_absolute_error', cv=cv, n_jobs=-1)
+
+#score positivo
+scores = np.absolute(scores)
+print('Mean MAE: %.3f (%.3f)' % (scores.mean(), scores.std()) )
+
+
+#Tunning do modelo XGBoost utilizando otimização Bayesiana (Optuna)
+#source:https://forecastegy.com/posts/xgboost-hyperparameter-tuning-with-optuna/
+def objective(trial):
+    params = {
+        "objective": "reg:squarederror",
+        "n_estimators": 1000,
+        "verbosity": 0,
+        "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
+        "max_depth": trial.suggest_int("max_depth", 1, 10),
+        "subsample": trial.suggest_float("subsample", 0.05, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.05, 1.0),
+        "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
+    }
+
+    model = XGBRegressor(**params)
+    model.fit(features_train, target_train['ghi_kt_5min'], verbose=False)
+    predictions = model.predict(features_test)
+    rmse = mean_squared_error(target_test['ghi_kt_5min'], predictions, squared=False)
+    return rmse
+
+#realizando a otimização
+study = optuna.create_study(direction='minimize')
+study.optimize(objective, n_trials=30)
+
+print('Best hyperparameters:', study.best_params)
+print('Best RMSE:', study.best_value)
+best_params = {
+    "objective": "reg:squarederror",
+    "n_estimators": 1000,
+    "verbosity": 0,
+    "learning_rate": 0.004952853495679143,
+    "max_depth": 6,
+    "subsample": 0.7569717172976217,
+    "colsample_bytree": 0.8805667242271331,
+    "min_child_weight": 3,
+}
+
+#Realizando previsões
+XGBoost = XGBRegressor(**best_params)
+XGBoost.fit(features_train, target_train['ghi_kt_5min'])
+XGBoost_hat_5min = XGBoost.predict(features_test)
+XGBoost_hat_5min = XGBoost_hat_5min * target_test['ghi_clear_5min']
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], XGBoost_hat_5min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'], XGBoost_hat_5min))
+print("O valor do R² é:", r2_score(target_test['ghi_5min'], XGBoost_hat_5min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'], XGBoost_hat_5min))
+
+plot_importance(XGBoost, title = "XGBoost Feature Importance")
