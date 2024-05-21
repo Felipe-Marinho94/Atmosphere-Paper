@@ -12,7 +12,7 @@ import numpy as np
 from IPython.display import clear_output
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector
-from qiskit.circuit.library import ZFeatureMap
+from qiskit.circuit.library import ZFeatureMap, TwoLocal
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_algorithms.optimizers import COBYLA, L_BFGS_B
 from qiskit_machine_learning.algorithms import QSVR
@@ -30,7 +30,7 @@ from qiskit_algorithms.utils import algorithm_globals
 import optuna
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error, r2_score
 from sklearn.model_selection import train_test_split, RepeatedKFold, cross_val_score
-from sklearn.preprocessing import MaxAbsScaler
+from sklearn.preprocessing import MaxAbsScaler, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.pipeline import Pipeline
 import sklearn
@@ -77,25 +77,25 @@ list(target_intra_hour.columns.values)
 
 '''
 Gerando os datasets para cada horizonte de previsão
-GHI/Para 5 min a posteriori/Features e Targets
+GHI/Para 30 min a posteriori/Features e Targets
 '''
-features_irradiance_5_min = features_irradiance[['B(ghi_kt|5min)', 'V(ghi_kt|5min)', 'L(ghi_kt|5min)']]
+features_irradiance_30_min = features_irradiance[['B(dni_kt|30min)', 'V(dni_kt|30min)', 'L(dni_kt|30min)']]
 features_sky_images = features_sky_images.drop(columns=['AVG(NRB)', 'STD(NRB)', 'ENT(NRB)'])
-features_5_min = pd.concat([features_irradiance_5_min, features_sky_images], axis = 1) #features irradiance + features sky images
-list(features_5_min.columns.values)
-features_5_min.head()
-features_5_min.tail()
+features_30_min = pd.concat([features_irradiance_30_min, features_sky_images], axis = 1) #features irradiance + features sky images
+list(features_30_min.columns.values)
+features_30_min.head()
+features_30_min.tail()
 
-target_5_min = target_intra_hour[['ghi_5min', 'ghi_clear_5min', 'ghi_kt_5min', 'timestamp']]
-list(target_5_min.columns.values)
-target_5_min.head()
-target_5_min.tail()
+target_30_min = target_intra_hour[['dni_30min', 'dni_clear_30min', 'dni_kt_30min', 'timestamp']]
+list(target_30_min.columns.values)
+target_30_min.head()
+target_30_min.tail()
 
 '''
 Etapa de pré-processamento
 Remoção de NA's, filtros de volumetria e volatilidade
 '''
-df = pd.concat([features_5_min.drop(columns = ['timestamp']), target_5_min], axis=1)
+df = pd.concat([features_30_min.drop(columns = ['timestamp']), target_30_min], axis=1)
 df_sem_Na = df.dropna()
 list(df_sem_Na.columns.values)
 
@@ -106,37 +106,35 @@ Será utilizados os anos de 2013,2014,2015 para treino dos modelos
 '''
 train = df_sem_Na.loc[df_sem_Na['timestamp'] < '2016-01-01']
 test = df_sem_Na.loc[(df_sem_Na['timestamp'] >= '2016-01-01') & (df_sem_Na['timestamp'] < '2016-12-31')]
-features_train = train.drop(columns = ['ghi_5min','ghi_clear_5min','ghi_kt_5min', 'timestamp'])
-target_train = train[['ghi_5min','ghi_clear_5min','ghi_kt_5min']]
-features_test = test.drop(columns = ['ghi_5min','ghi_clear_5min','ghi_kt_5min', 'timestamp'])
-target_test = test[['ghi_5min','ghi_clear_5min','ghi_kt_5min']]
+features_train = train.drop(columns = ['dni_30min','dni_clear_30min','dni_kt_30min', 'timestamp'])
+target_train = train[['dni_30min','dni_clear_30min','dni_kt_30min']]
+features_test = test.drop(columns = ['dni_30min','dni_clear_30min','dni_kt_30min', 'timestamp'])
+target_test = test[['dni_30min','dni_clear_30min','dni_kt_30min']]
 
 #------------------------------------------------------------------------------
 #Implementação do modelo de Group Method Data Handling (GMDH)
 #Fundamentado pela documentação do pacote GMDH: https://gmdh.net/index.html
 #------------------------------------------------------------------------------
 model_GMDH = Combi()
-model_GMDH.fit(np.array(features_train), np.array(target_train['ghi_kt_5min']))
-GMDH_hat_5min = model_GMDH.predict(features_test)
+model_GMDH.fit(np.array(features_train), np.array(target_train['dni_kt_30min']))
+GMDH_hat_30min = model_GMDH.predict(features_test)
 
 #Conversão em inrradiância utilizando a irradiância de céu claro
-GMDH_hat_5min = GMDH_hat_5min * target_test['ghi_clear_5min']
+GMDH_hat_30min = GMDH_hat_30min * target_test['dni_clear_30min']
 
 #Avaliação do desempenho: RMSE, MAE, R², MAPE
-print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], GMDH_hat_5min)))
-print("O valor do RMSE é:", mean_absolute_error(target_test['ghi_5min'], GMDH_hat_5min))
-print("O valor do RMSE é:", r2_score(target_test['ghi_5min'], GMDH_hat_5min))
-print("O valor do RMSE é:", mean_absolute_percentage_error(target_test['ghi_5min'], GMDH_hat_5min))
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['dni_30min'], GMDH_hat_30min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['dni_30min'], GMDH_hat_30min))
+print("O valor do R² é:", r2_score(target_test['dni_30min'], GMDH_hat_30min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['dni_30min'], GMDH_hat_30min))
 
 #------------------------------------------------------------------------------
 #Implementação do modelo Light Gradient Boosting Method (lightGBM)
 #Fundamentado pela documentação do pacote lightGBM: https://lightgbm.readthedocs.io/en/latest/Python-Intro.html
 #------------------------------------------------------------------------------
 #Carregando os dados para o modelo lightGBM
-
-
-train_lightgbm = lgb.Dataset(features_train, target_train['ghi_kt_5min'])
-test_lightgbm = lgb.Dataset(features_test, target_test['ghi_kt_5min'], reference = train_lightgbm)
+train_lightgbm = lgb.Dataset(features_train, target_train['dni_kt_30min'])
+test_lightgbm = lgb.Dataset(features_test, target_test['dni_kt_30min'], reference = train_lightgbm)
 
 #Configuração dos parâmetros
 params = {
@@ -155,20 +153,20 @@ model = lgb.train(params,
                  valid_sets = test_lightgbm)
 
 #Previsão
-lightGBM_hat_5min = model.predict(features_test)
+lightGBM_hat_30min = model.predict(features_test)
 
 #Conversão para irradiância
-lightGBM_hat_5min = lightGBM_hat_5min * target_test['ghi_clear_5min']
+lightGBM_hat_30min = lightGBM_hat_30min * target_test['dni_clear_30min']
 
 #Avaliação do Desempenho
-print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], lightGBM_hat_5min)))
-print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'], lightGBM_hat_5min))
-print("O valor do R² é:", r2_score(target_test['ghi_5min'], lightGBM_hat_5min))
-print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'], lightGBM_hat_5min)) 
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['dni_30min'], lightGBM_hat_30min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['dni_30min'], lightGBM_hat_30min))
+print("O valor do R² é:", r2_score(target_test['dni_30min'], lightGBM_hat_30min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['dni_30min'], lightGBM_hat_30min))
 
 #Importância de Atributos
 lgb.plot_importance(model, figsize=(7,6), title="LightGBM Feature Importance")
-plt.show()  
+plt.show()
 
 #Procedimento de Tunning, para referência: https://forecastegy.com/posts/how-to-use-optuna-to-tune-lightgbm-hyperparameters/
 def objective(trial):
@@ -186,9 +184,9 @@ def objective(trial):
     }
     
     model = lgb.LGBMRegressor(**params)
-    model.fit(features_train, target_train['ghi_kt_5min'])
+    model.fit(features_train, target_train['dni_kt_30min'])
     predictions = model.predict(features_test)
-    rmse = mean_squared_error(target_test['ghi_kt_5min'], predictions, squared=False)
+    rmse = mean_squared_error(target_test['dni_kt_30min'], predictions, squared=True)
     return rmse
 
 #Otimização utilizando o pacote Optuna
@@ -204,16 +202,16 @@ model = lgb.train(study.best_params,
                  valid_sets = test_lightgbm)
 
 #Previsão
-lightGBM_hat_5min = model.predict(features_test)
+lightGBM_hat_30min = model.predict(features_test)
 
 #Conversão para irradiância
-lightGBM_hat_5min = lightGBM_hat_5min * target_test['ghi_clear_5min']
+lightGBM_hat_30min = lightGBM_hat_30min * target_test['ghi_clear_30min']
 
 #Avaliação do Desempenho
-print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], lightGBM_hat_5min)))
-print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'], lightGBM_hat_5min))
-print("O valor do R² é:", r2_score(target_test['ghi_5min'], lightGBM_hat_5min))
-print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'], lightGBM_hat_5min))
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_30min'], lightGBM_hat_30min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_30min'], lightGBM_hat_30min))
+print("O valor do R² é:", r2_score(target_test['ghi_30min'], lightGBM_hat_30min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_30min'], lightGBM_hat_30min))
 
 #------------------------------------------------------------------------------
 #Implementação do modelo Quantum Support Vector Regression (QSVR)
@@ -264,14 +262,14 @@ pipeline = Pipeline(steps=[('s',rfe),('m',model)])
 
 #Avaliação do modelo
 cv = RepeatedKFold(n_splits=5, n_repeats=1, random_state=1)
-n_scores = cross_val_score(pipeline, features_train, target_train['ghi_kt_5min'],
+n_scores = cross_val_score(pipeline, features_train, target_train['ghi_kt_10min'],
                            scoring='neg_mean_absolute_error', cv=cv, n_jobs=-1, error_score='raise')
 
 #Reportando desempenho
 print('MAE: %.3f (%.3f)' % (np.mean(n_scores), np.std(n_scores)))
 
 #Selecionando a features
-rfe.fit(features_train, target_train['ghi_kt_5min'])
+rfe.fit(features_train, target_train['ghi_kt_10min'])
 
 #selecionando as features
 for i in range(features_train.shape[1]):
@@ -284,20 +282,35 @@ list(features_train.columns)
 #VQR - source:https://qiskit-community.github.io/qiskit-machine-learning/tutorials/02_neural_network_classifier_and_regressor.html 
 #------------------------------------------------------------------------------
 #Construindo um fature map simples
-X_train = np.array(features_train['B(ghi_kt|5min)']).reshape(len(features_train), 1)
-y_train = np.array(target_train['ghi_kt_5min'])
+X_train = np.array(features_train['B(ghi_kt|10min)']).reshape(len(features_train), 1)
+y_train = np.array(target_train['ghi_kt_10min'])
 
-X_test = np.array(features_test['B(ghi_kt|5min)']).reshape(len(features_test), 1)
-y_test = np.array(target_test['ghi_kt_5min'])
+X_test = np.array(features_test['B(ghi_kt|10min)']).reshape(len(features_test), 1)
+y_test = np.array(target_test['ghi_kt_10min'])
+
+#Normalizando os dados
+scale = StandardScaler()
+X_train_scale = scale.fit_transform(X_train) 
+X_test_scale = scale.fit_transform(X_test)
 
 param_x = Parameter("x")
-feature_map = QuantumCircuit(1, name="fm")
-feature_map.ry(param_x, 0)
+feature_map = QuantumCircuit(len(X_train_scale[0]), name="fm")
+params_x = [Parameter(f"x{i+1}") for i in range(len(X_train_scale[0]))]
+
+#angle encoding
+for i, param in enumerate(params_x):
+     feature_map.ry(param, i)
+
+#param_x = Parameter("x")
+#feature_map = QuantumCircuit(1, name="fm")
+#feature_map.ry(param_x, 0)
+
+ansatz = TwoLocal(1, 'ry', 'cx', 'linear', reps = 1)
 
 #Construindo um ansatz simples
-param_y = Parameter("y")
-ansatz = QuantumCircuit(1, name="vf")
-ansatz.ry(param_y, 0)
+#param_y = Parameter("y")
+#ansatz = QuantumCircuit(1, name="vf")
+#ansatz.ry(param_y, 0)
 
 #Construindo um circuito
 qc = QNNCircuit(feature_map=feature_map, ansatz=ansatz)
@@ -324,18 +337,18 @@ regressor = NeuralNetworkRegressor(
 
 plt.rcParams["figure.figsize"] = (12, 6)
 
-X_train[:100].shape
-np.array(y_train[:100])
+#X_train[:100].shape
+#np.array(y_train[:100])
 
-regressor.fit(X_train[:1000], y_train[:1000])
-VQR_hat_5min = regressor.predict(X_test[:1000])
-VQR_hat_5min = np.squeeze(VQR_hat_5min)
+regressor.fit(X_train_scale, y_train)
+VQR_hat_10min = regressor.predict(X_test_scale)
+VQR_hat_10min = np.squeeze(VQR_hat_10min)
 
-VQR_hat_5min = VQR_hat_5min * target_test['ghi_clear_5min'][0:1000]
-print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'][0:1000], VQR_hat_5min)))
-print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'][0:1000], VQR_hat_5min))
-print("O valor do R² é:", r2_score(target_test['ghi_5min'][0:1000], VQR_hat_5min))
-print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'][0:1000], VQR_hat_5min))
+VQR_hat_10min = VQR_hat_10min * target_test['ghi_clear_10min']
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_10min'], VQR_hat_10min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_10min'], VQR_hat_10min))
+print("O valor do R² é:", r2_score(target_test['ghi_10min'], VQR_hat_10min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_10min'], VQR_hat_10min))
 
 #------------------------------------------------------------------------------
 #Implementação do modelo XGBoost
@@ -347,7 +360,7 @@ XGBoost = XGBRegressor()
 #Definindo o método de avaliação do modelo
 cv = RepeatedKFold(n_splits=5, n_repeats=1, random_state=1)
 
-scores = cross_val_score(XGBoost, features_train, target_train['ghi_kt_5min'],
+scores = cross_val_score(XGBoost, features_train, target_train['ghi_kt_15min'],
                          scoring='neg_mean_absolute_error', cv=cv, n_jobs=-1)
 
 #score positivo
@@ -370,9 +383,9 @@ def objective(trial):
     }
 
     model = XGBRegressor(**params)
-    model.fit(features_train, target_train['ghi_kt_5min'], verbose=False)
+    model.fit(features_train, target_train['ghi_kt_30min'], verbose=False)
     predictions = model.predict(features_test)
-    rmse = mean_squared_error(target_test['ghi_kt_5min'], predictions, squared=False)
+    rmse = mean_squared_error(target_test['ghi_kt_30min'], predictions, squared=False)
     return rmse
 
 #realizando a otimização
@@ -385,21 +398,21 @@ best_params = {
     "objective": "reg:squarederror",
     "n_estimators": 1000,
     "verbosity": 0,
-    "learning_rate": 0.004952853495679143,
-    "max_depth": 6,
-    "subsample": 0.7569717172976217,
-    "colsample_bytree": 0.8805667242271331,
-    "min_child_weight": 3,
+    "learning_rate": 0.007862369974562914,
+    "max_depth":  6,
+    "subsample": 0.6476886673566187,
+    "colsample_bytree": 0.8835466631816744,
+    "min_child_weight": 12,
 }
 
 #Realizando previsões
 XGBoost = XGBRegressor(**best_params)
-XGBoost.fit(features_train, target_train['ghi_kt_5min'])
-XGBoost_hat_5min = XGBoost.predict(features_test)
-XGBoost_hat_5min = XGBoost_hat_5min * target_test['ghi_clear_5min']
-print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_5min'], XGBoost_hat_5min)))
-print("O valor do MAE é:", mean_absolute_error(target_test['ghi_5min'], XGBoost_hat_5min))
-print("O valor do R² é:", r2_score(target_test['ghi_5min'], XGBoost_hat_5min))
-print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_5min'], XGBoost_hat_5min))
+XGBoost.fit(features_train, target_train['ghi_kt_30min'])
+XGBoost_hat_30min = XGBoost.predict(features_test)
+XGBoost_hat_30min = XGBoost_hat_30min * target_test['ghi_clear_30min']
+print("O valor do RMSE é:", np.sqrt(mean_squared_error(target_test['ghi_30min'], XGBoost_hat_30min)))
+print("O valor do MAE é:", mean_absolute_error(target_test['ghi_30min'], XGBoost_hat_30min))
+print("O valor do R² é:", r2_score(target_test['ghi_30min'], XGBoost_hat_30min))
+print("O valor do MAPE é:", mean_absolute_percentage_error(target_test['ghi_30min'], XGBoost_hat_30min))
 
 plot_importance(XGBoost, title = "XGBoost Feature Importance")
