@@ -1,0 +1,3 @@
+Variáveis selecionadas após correlação e RFE
+array(['B(ghi_kt|5min)', 'V(ghi_kt|5min)', 'AVG(G)', 'ENT(G)', 'ENT(RB)'],
+      dtype=object)
