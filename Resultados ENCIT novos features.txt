@@ -1,0 +1,209 @@
+#GHI
+#Horizonte de 5 min
+
+##Hiperparâmetros ótimos
+###LigthGBM
+Best hyperparameters: {
+'learning_rate': 0.010654639538180005,
+'num_leaves': 18,
+'subsample': 0.6791272829372352,
+'colsample_bytree': 0.7332739787068787,
+'min_data_in_leaf': 47}
+
+###XGBoost
+Best hyperparameters: {
+'learning_rate': 0.006522320775620551,
+'num_leaves': 925,
+'subsample': 0.7750449780964337,
+'colsample_bytree': 0.8683945416478426,
+'min_data_in_leaf': 37,
+'max_depth': 5,
+'min_child_weight': 13}
+
+
+##Métricas de Desempenho
+###GMDH
+O valor do RMSE é: 50.59008530804916
+O valor do MAE é: 23.281899097936076
+O valor do R² é: 0.9682289663915588
+O valor do MAPE é: 0.11207248579252052
+
+###lightGBM
+O valor do RMSE é: 47.503346624761406
+O valor do MAE é: 20.67162602888154
+O valor do R² é: 0.9719876893293893
+O valor do MAPE é: 0.0951550976886362
+
+###XGBoost
+O valor do RMSE é: 81.72460754014028
+O valor do MAE é: 38.467026347810304
+O valor do R² é: 0.9442264207969739
+O valor do MAPE é: 1.0305241157933264e+16
+
+##########################################################
+#Horizonte de 10 min
+
+##Hiperparâmetros ótimos
+###LigthGBM
+Best hyperparameters: {
+'learning_rate': 0.007839006249698586,
+'num_leaves': 581,
+'subsample': 0.395714900573509,
+'colsample_bytree': 0.6633337414798546,
+'min_data_in_leaf': 54}
+
+###XGBoost
+Best hyperparameters: {
+'learning_rate': 0.0052964320485669614,
+'num_leaves': 925,
+'subsample': 0.47406363949253966,
+'colsample_bytree': 0.9968727470451537,
+'min_data_in_leaf': 37,
+'max_depth': 7,
+'min_child_weight': 17}
+
+
+##Métricas de Desempenho
+###GMDH
+O valor do RMSE é: 109.09662841810565
+O valor do MAE é: 60.445247352811336
+O valor do R² é: 0.9010582517088991
+O valor do MAPE é: 3.801109961907191e+16
+
+###lightGBM
+O valor do RMSE é: 105.06068880173089
+O valor do MAE é: 55.62646271801857
+O valor do R² é: 0.908243379545966
+O valor do MAPE é: 2.847746828575277e+16
+
+###XGBoost
+O valor do RMSE é: 103.14032062689535
+O valor do MAE é: 53.64058595338655
+O valor do R² é: 0.9115670981853947
+O valor do MAPE é: 2.6647453963989332e+16
+
+##########################################################
+#Horizonte de 15 min
+
+##Hiperparâmetros ótimos
+###LigthGBM
+Best hyperparameters: {
+'learning_rate': 0.006517381880903491,
+'num_leaves': 100,
+'subsample': 0.43835904846635615,
+'colsample_bytree': 0.7493338782171601,
+'min_data_in_leaf': 52}
+
+###XGBoost
+Best hyperparameters: {
+'learning_rate': 0.007729051436946454,
+'num_leaves': 925,
+'subsample': 0.6539827538104335,
+'colsample_bytree': 0.694741978130467,
+'min_data_in_leaf': 37,
+'max_depth': 8,
+'min_child_weight': 15}
+
+
+##Métricas de Desempenho
+###GMDH
+O valor do RMSE é: 123.43747037981365
+O valor do MAE é: 72.150282772071
+O valor do R² é: 0.8742627239871757
+O valor do MAPE é: 5.364617827716024e+16
+
+###lightGBM
+O valor do RMSE é: 117.50792309918613
+O valor do MAE é: 65.18830239845681
+O valor do R² é: 0.8860526257200965
+O valor do MAPE é: 4.2222011995389576e+16
+
+###XGBoost
+O valor do RMSE é: 116.5979511703629
+O valor do MAE é: 63.42449341450504
+O valor do R² é: 0.8878105911393818
+O valor do MAPE é: 3.8950631031890264e+16
+
+##########################################################
+#Horizonte de 20 min
+
+##Hiperparâmetros ótimos
+###LigthGBM
+Best hyperparameters: {
+'learning_rate': 0.008650835448180565,
+'num_leaves': 72,
+'subsample': 0.8576945916587074,
+'colsample_bytree': 0.9314576027598633,
+'min_data_in_leaf': 83}
+
+###XGBoost
+Best hyperparameters: {
+'learning_rate': 0.005555674401878409,
+'num_leaves': 925,
+'subsample': 0.4191778800244207,
+'colsample_bytree': 0.9281033190532807,
+'min_data_in_leaf': 37,
+'max_depth': 8,
+'min_child_weight': 6}
+
+
+##Métricas de Desempenho
+###GMDH
+O valor do RMSE é: 133.60009669799683
+O valor do MAE é: 80.73897350459573
+O valor do R² é: 0.854165811612785
+O valor do MAPE é: 6.70512920540586e+16
+
+###lightGBM
+O valor do RMSE é: 126.43923236314316
+O valor do MAE é: 71.96926426071951
+O valor do R² é: 0.8693800524526988
+O valor do MAPE é: 5.427170224373348e+16
+
+###XGBoost
+O valor do RMSE é: 126.00308155585999
+O valor do MAE é: 70.76999177496081
+O valor do R² é: 0.8702796424898368
+O valor do MAPE é: 5.142185044940515e+16
+
+##########################################################
+#Horizonte de 25 min
+
+##Hiperparâmetros ótimos
+###LigthGBM
+Best hyperparameters: {
+'learning_rate': 0.006099818650373465,
+'num_leaves': 777,
+'subsample': 0.4527331804185071,
+'colsample_bytree': 0.6415509705401482,
+'min_data_in_leaf': 100}
+
+###XGBoost
+Best hyperparameters: {
+'learning_rate': 0.007916874282876261,
+'num_leaves': 925,
+'subsample': 0.6351845302769473,
+'colsample_bytree': 0.48465178325438835,
+'min_data_in_leaf': 37,
+'max_depth': 7,
+'min_child_weight': 20}
+
+
+##Métricas de Desempenho
+###GMDH
+O valor do RMSE é: 141.1840583241038
+O valor do MAE é: 88.29318642754893
+O valor do R² é: 0.8389894000457351
+O valor do MAPE é: 7.762432745863846e+16
+
+###lightGBM
+O valor do RMSE é: 133.43915542437918
+O valor do MAE é: 77.73049896250384
+O valor do R² é: 0.8561699225469326
+O valor do MAPE é: 6.5631954025007736e+16
+
+###XGBoost
+O valor do RMSE é: 133.51956222973135
+O valor do MAE é: 77.50153892427046
+O valor do R² é: 0.8559965341384557
+O valor do MAPE é: 6.296927813403772e+16

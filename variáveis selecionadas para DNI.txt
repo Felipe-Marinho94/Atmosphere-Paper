@@ -1,0 +1,2 @@
+#Variáveis selecionadas para DNI no horizonte de 5min.
+['B(dni_kt|5min)', 'AVG(R)', 'ENT(R)', 'ENT(G)', 'ENT(RB)']
